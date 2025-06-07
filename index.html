@@ -205,30 +205,51 @@
             }
         }
 
-        // スレッドIDを取得
-        async function fetchThreads(token, serverId) {
+        // スレッドIDを取得（チャンネルごとのスレッドをチェック）
+async function fetchThreads(token, serverId) {
+    try {
+        // まず全チャンネルを取得
+        const channelRes = await fetch(`https://discord.com/api/v10/guilds/${serverId}/channels`, {
+            headers: { 'Authorization': token }
+        });
+        if (!channelRes.ok) {
+            logMessage(`チャンネル取得エラー: ステータス ${channelRes.status}`);
+            return [];
+        }
+        const channels = await channelRes.json();
+        
+        // スレッドを持つ可能性のあるチャンネル（テキスト、フォーラムなど）を対象
+        const threadCapableChannels = channels.filter(c => [0, 5, 15].includes(c.type)); // テキスト、アナウンス、フォーラム
+        let allThreads = [];
+        
+        // 各チャンネルでスレッドを取得
+        for (const channel of threadCapableChannels) {
             try {
-                const res = await fetch(`https://discord.com/api/v10/guilds/${serverId}/threads/active`, {
+                const threadRes = await fetch(`https://discord.com/api/v10/channels/${channel.id}/threads`, {
                     headers: { 'Authorization': token }
                 });
-                if (res.ok) {
-                    const threads = await res.json();
-                    const threadIds = threads.threads.map(thread => ({
+                if (threadRes.ok) {
+                    const threads = await threadRes.json();
+                    allThreads.push(...threads.threads.map(thread => ({
                         id: thread.id,
                         name: thread.name
-                    }));
-                    threadIdsInput.value = parseList(threadIds.map(t => `${t.id} (${t.name})`));
-                    logMessage(`アクティブなスレッドIDを${threadIds.length}件取得しました`, true);
-                    return threadIds;
+                    })));
                 } else {
-                    logMessage(`スレッド取得エラー: トークンにサーバーへのアクセス権限がありません (ステータス ${res.status})`);
-                    return [];
+                    logMessage(`チャンネル ${channel.name} のスレッド取得エラー: ステータス ${threadRes.status}`);
                 }
             } catch (err) {
-                logMessage(`スレッド取得エラー: ${err.message}`);
-                return [];
+                logMessage(`チャンネル ${channel.name} のスレッド取得エラー: ${err.message}`);
             }
         }
+        
+        threadIdsInput.value = parseList(allThreads.map(t => `${t.id} (${t.name})`));
+        logMessage(`スレッドIDを${allThreads.length}件取得しました`, true);
+        return allThreads;
+    } catch (err) {
+        logMessage(`スレッド取得エラー: ${err.message}`);
+        return [];
+    }
+}
 
         // ユーザーIDを取得（WebSocket）
         async function fetchUsers(token, serverId) {
