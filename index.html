@@ -208,21 +208,22 @@
         // スレッドIDを取得（アクティブ＋アーカイブ済みスレッド）
 async function fetchThreads(token, serverId) {
     try {
-        // まず全チャンネルを取得
+        // 全チャンネルを取得
         const channelRes = await fetch(`https://discord.com/api/v10/guilds/${serverId}/channels`, {
             headers: { 'Authorization': token }
         });
         if (!channelRes.ok) {
-            logMessage(`チャンネル取得エラー: ステータス ${channelRes.status}`);
+            const errorData = await channelRes.json().catch(() => ({}));
+            logMessage(`チャンネル取得エラー: ステータス ${channelRes.status}, 詳細: ${JSON.stringify(errorData)}`, false);
             return [];
         }
         const channels = await channelRes.json();
         
-        // スレッドを持つ可能性のあるチャンネル（テキスト、アナウンス、フォーラム）を対象
+        // スレッドを持つ可能性のあるチャンネル（テキスト、アナウンス、フォーラム）
         const threadCapableChannels = channels.filter(c => [0, 5, 15].includes(c.type)); // テキスト、アナウンス、フォーラム
         let allThreads = [];
         
-        // 各チャンネルでアクティブおよびアーカイブ済みスレッドを取得
+        // 各チャンネルでスレッドを取得
         for (const channel of threadCapableChannels) {
             try {
                 // アクティブなスレッド
@@ -237,8 +238,8 @@ async function fetchThreads(token, serverId) {
                         type: thread.type === 11 ? '公開スレッド' : 'プライベートスレッド'
                     })));
                 } else {
-                    const errorData = await activeThreadRes.json();
-                    logMessage(`チャンネル ${channel.name} のアクティブスレッド取得エラー: ステータス ${activeThreadRes.status}, 詳細: ${JSON.stringify(errorData)}`);
+                    const errorData = await activeThreadRes.json().catch(() => ({}));
+                    logMessage(`チャンネル ${channel.name} のアクティブスレッド取得エラー: ステータス ${activeThreadRes.status}, 詳細: ${JSON.stringify(errorData)}`, false);
                 }
 
                 // アーカイブ済みの公開スレッド
@@ -253,8 +254,8 @@ async function fetchThreads(token, serverId) {
                         type: '公開スレッド（アーカイブ）'
                     })));
                 } else {
-                    const errorData = await archivedPublicThreadRes.json();
-                    logMessage(`チャンネル ${channel.name} のアーカイブ公開スレッド取得エラー: ステータス ${archivedPublicThreadRes.status}, 詳細: ${JSON.stringify(errorData)}`);
+                    const errorData = await archivedPublicThreadRes.json().catch(() => ({}));
+                    logMessage(`チャンネル ${channel.name} のアーカイブ公開スレッド取得エラー: ステータス ${archivedPublicThreadRes.status}, 詳細: ${JSON.stringify(errorData)}`, false);
                 }
 
                 // 所有者ならアーカイブ済みのプライベートスレッドも取得
@@ -269,11 +270,11 @@ async function fetchThreads(token, serverId) {
                         type: 'プライベートスレッド（アーカイブ）'
                     })));
                 } else {
-                    const errorData = await archivedPrivateThreadRes.json();
-                    logMessage(`チャンネル ${channel.name} のアーカイブプライベートスレッド取得エラー: ステータス ${archivedPrivateThreadRes.status}, 詳細: ${JSON.stringify(errorData)}`);
+                    const errorData = await archivedPrivateThreadRes.json().catch(() => ({}));
+                    logMessage(`チャンネル ${channel.name} のアーカイブプライベートスレッド取得エラー: ステータス ${archivedPrivateThreadRes.status}, 詳細: ${JSON.stringify(errorData)}`, false);
                 }
             } catch (err) {
-                logMessage(`チャンネル ${channel.name} のスレッド取得エラー: ${err.message}`);
+                logMessage(`チャンネル ${channel.name} のスレッド取得エラー: ${err.message}`, false);
             }
         }
         
@@ -281,11 +282,10 @@ async function fetchThreads(token, serverId) {
         logMessage(`スレッドIDを${allThreads.length}件取得しました`, true);
         return allThreads;
     } catch (err) {
-        logMessage(`スレッド取得エラー: ${err.message}`);
+        logMessage(`スレッド取得エラー: ${err.message}`, false);
         return [];
     }
 }
-
         // ユーザーIDを取得（WebSocket）
         async function fetchUsers(token, serverId) {
             return new Promise((resolve) => {
