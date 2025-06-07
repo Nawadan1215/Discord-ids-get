@@ -205,7 +205,7 @@
             }
         }
 
-        // スレッドIDを取得（チャンネルごとのスレッドをチェック）
+        // スレッドIDを取得（アクティブ＋アーカイブ済みスレッド）
 async function fetchThreads(token, serverId) {
     try {
         // まず全チャンネルを取得
@@ -218,31 +218,66 @@ async function fetchThreads(token, serverId) {
         }
         const channels = await channelRes.json();
         
-        // スレッドを持つ可能性のあるチャンネル（テキスト、フォーラムなど）を対象
+        // スレッドを持つ可能性のあるチャンネル（テキスト、アナウンス、フォーラム）を対象
         const threadCapableChannels = channels.filter(c => [0, 5, 15].includes(c.type)); // テキスト、アナウンス、フォーラム
         let allThreads = [];
         
-        // 各チャンネルでスレッドを取得
+        // 各チャンネルでアクティブおよびアーカイブ済みスレッドを取得
         for (const channel of threadCapableChannels) {
             try {
-                const threadRes = await fetch(`https://discord.com/api/v10/channels/${channel.id}/threads`, {
+                // アクティブなスレッド
+                const activeThreadRes = await fetch(`https://discord.com/api/v10/channels/${channel.id}/threads/active`, {
                     headers: { 'Authorization': token }
                 });
-                if (threadRes.ok) {
-                    const threads = await threadRes.json();
+                if (activeThreadRes.ok) {
+                    const threads = await activeThreadRes.json();
                     allThreads.push(...threads.threads.map(thread => ({
                         id: thread.id,
-                        name: thread.name
+                        name: thread.name,
+                        type: thread.type === 11 ? '公開スレッド' : 'プライベートスレッド'
                     })));
                 } else {
-                    logMessage(`チャンネル ${channel.name} のスレッド取得エラー: ステータス ${threadRes.status}`);
+                    const errorData = await activeThreadRes.json();
+                    logMessage(`チャンネル ${channel.name} のアクティブスレッド取得エラー: ステータス ${activeThreadRes.status}, 詳細: ${JSON.stringify(errorData)}`);
+                }
+
+                // アーカイブ済みの公開スレッド
+                const archivedPublicThreadRes = await fetch(`https://discord.com/api/v10/channels/${channel.id}/threads/archived/public`, {
+                    headers: { 'Authorization': token }
+                });
+                if (archivedPublicThreadRes.ok) {
+                    const threads = await archivedPublicThreadRes.json();
+                    allThreads.push(...threads.threads.map(thread => ({
+                        id: thread.id,
+                        name: thread.name,
+                        type: '公開スレッド（アーカイブ）'
+                    })));
+                } else {
+                    const errorData = await archivedPublicThreadRes.json();
+                    logMessage(`チャンネル ${channel.name} のアーカイブ公開スレッド取得エラー: ステータス ${archivedPublicThreadRes.status}, 詳細: ${JSON.stringify(errorData)}`);
+                }
+
+                // 所有者ならアーカイブ済みのプライベートスレッドも取得
+                const archivedPrivateThreadRes = await fetch(`https://discord.com/api/v10/channels/${channel.id}/threads/archived/private`, {
+                    headers: { 'Authorization': token }
+                });
+                if (archivedPrivateThreadRes.ok) {
+                    const threads = await archivedPrivateThreadRes.json();
+                    allThreads.push(...threads.threads.map(thread => ({
+                        id: thread.id,
+                        name: thread.name,
+                        type: 'プライベートスレッド（アーカイブ）'
+                    })));
+                } else {
+                    const errorData = await archivedPrivateThreadRes.json();
+                    logMessage(`チャンネル ${channel.name} のアーカイブプライベートスレッド取得エラー: ステータス ${archivedPrivateThreadRes.status}, 詳細: ${JSON.stringify(errorData)}`);
                 }
             } catch (err) {
                 logMessage(`チャンネル ${channel.name} のスレッド取得エラー: ${err.message}`);
             }
         }
         
-        threadIdsInput.value = parseList(allThreads.map(t => `${t.id} (${t.name})`));
+        threadIdsInput.value = parseList(allThreads.map(t => `${t.id} (${t.name}, ${t.type})`));
         logMessage(`スレッドIDを${allThreads.length}件取得しました`, true);
         return allThreads;
     } catch (err) {
