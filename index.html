@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord ID 取得ツール</title>
+    <style>
+        :root {
+            --primary-color: #a855f7;
+            --secondary-color: #d8b4fe;
+            --background: #1a1a2e;
+            --text-color: #ffffff;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.5);
+            max-width: 600px;
+            width: 100%;
+            animation: fadeIn 1s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--primary-color);
+            text-shadow: 0 0 10px var(--primary-color);
+        }
+
+        .input-group {
+            margin: 15px 0;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: var(--secondary-color);
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--primary-color);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-color);
+            font-size: 16px;
+        }
+
+        button {
+            background: var(--primary-color);
+            color: var(--text-color);
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin: 10px 5px;
+        }
+
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0 15px var(--primary-color);
+        }
+
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        #logs {
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+
+        .success { color: var(--secondary-color); }
+        .error { color: #ff5555; }
+
+        /* カスタムスクロールバー */
+        #logs::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #logs::-webkit-scrollbar-thumb {
+            background: var(--primary-color);
+            border-radius: 4px;
+        }
+
+        /* レスポンシブ */
+        @media (max-width: 600px) {
+            .container { padding: 15px; }
+            button { width: 100%; margin: 10px 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Discord ID 取得ツール</h1>
+        <div class="input-group">
+            <label for="token">ユーザートークン</label>
+            <input type="text" id="token" placeholder="トークンを入力">
+        </div>
+        <div class="input-group">
+            <label for="serverId">サーバーID</label>
+            <input type="text" id="serverId" placeholder="サーバーIDを入力">
+        </div>
+        <button id="fetchBtn">IDを取得</button>
+        <div class="input-group">
+            <label>チャンネルID</label>
+            <textarea id="channelIds" rows="5" readonly></textarea>
+        </div>
+        <div class="input-group">
+            <label>スレッドID</label>
+            <textarea id="threadIds" rows="5" readonly></textarea>
+        </div>
+        <div class="input-group">
+            <label>フォーラムチャンネルID</label>
+            <textarea id="forumIds" rows="5" readonly></textarea>
+        </div>
+        <div class="input-group">
+            <label>ユーザーID</label>
+            <textarea id="userIds" rows="5" readonly></textarea>
+        </div>
+        <div id="logs"></div>
+    </div>
+
+    <script>
+        const tokenInput = document.getElementById('token');
+        const serverIdInput = document.getElementById('serverId');
+        const fetchBtn = document.getElementById('fetchBtn');
+        const channelIdsInput = document.getElementById('channelIds');
+        const threadIdsInput = document.getElementById('threadIds');
+        const forumIdsInput = document.getElementById('forumIds');
+        const userIdsInput = document.getElementById('userIds');
+        const logsDiv = document.getElementById('logs');
+
+        // ログを表示
+        function logMessage(msg, isSuccess = false) {
+            const logLine = document.createElement('div');
+            logLine.textContent = `[${new Date().toLocaleTimeString('ja-JP')}] ${msg}`;
+            logLine.className = isSuccess ? 'success' : 'error';
+            logsDiv.appendChild(logLine);
+            logLine.style.opacity = '0';
+            setTimeout(() => {
+                logLine.style.transition = 'opacity 0.5s ease';
+                logLine.style.opacity = '1';
+                logsDiv.scrollTop = logsDiv.scrollHeight;
+            }, 10);
+        }
+
+        // 配列をユニークにして改行で結合
+        function parseList(arr) {
+            return [...new Set(arr.filter(item => item))].join('\n');
+        }
+
+        // チャンネルIDを取得
+        async function fetchChannels(token, serverId) {
+            try {
+                const res = await fetch(`https://discord.com/api/v10/guilds/${serverId}/channels`, {
+                    headers: { 'Authorization': token }
+                });
+                if (res.ok) {
+                    const channels = await res.json();
+                    const channelIds = channels.map(channel => ({
+                        id: channel.id,
+                        name: channel.name,
+                        type: channel.type
+                    }));
+                    // 全チャンネルID
+                    channelIdsInput.value = parseList(channelIds.map(c => `${c.id} (${c.name}, タイプ: ${c.type})`));
+                    // フォーラムチャンネルID（タイプ15）
+                    const forumChannels = channelIds.filter(c => c.type === 15);
+                    forumIdsInput.value = parseList(forumChannels.map(c => `${c.id} (${c.name})`));
+                    logMessage(`チャンネルIDを${channelIds.length}件、フォーラムチャンネルを${forumChannels.length}件取得しました`, true);
+                    return channelIds;
+                } else {
+                    logMessage(`チャンネル取得エラー: トークンにサーバーへのアクセス権限がありません (ステータス ${res.status})`);
+                    return [];
+                }
+            } catch (err) {
+                logMessage(`チャンネル取得エラー: ${err.message}`);
+                return [];
+            }
+        }
+
+        // スレッドIDを取得
+        async function fetchThreads(token, serverId) {
+            try {
+                const res = await fetch(`https://discord.com/api/v10/guilds/${serverId}/threads/active`, {
+                    headers: { 'Authorization': token }
+                });
+                if (res.ok) {
+                    const threads = await res.json();
+                    const threadIds = threads.threads.map(thread => ({
+                        id: thread.id,
+                        name: thread.name
+                    }));
+                    threadIdsInput.value = parseList(threadIds.map(t => `${t.id} (${t.name})`));
+                    logMessage(`アクティブなスレッドIDを${threadIds.length}件取得しました`, true);
+                    return threadIds;
+                } else {
+                    logMessage(`スレッド取得エラー: トークンにサーバーへのアクセス権限がありません (ステータス ${res.status})`);
+                    return [];
+                }
+            } catch (err) {
+                logMessage(`スレッド取得エラー: ${err.message}`);
+                return [];
+            }
+        }
+
+        // ユーザーIDを取得（WebSocket）
+        async function fetchUsers(token, serverId) {
+            return new Promise((resolve) => {
+                const ws = new WebSocket('wss://gateway.discord.gg/?v=9&encoding=json');
+                ws.onopen = () => {
+                    ws.send(JSON.stringify({
+                        op: 2,
+                        d: {
+                            token,
+                            properties: { os: 'Windows', browser: 'Chrome', device: 'pc' },
+                            intents: 1 << 12 // Guild members intent
+                        }
+                    }));
+                };
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.t === 'GUILD_MEMBER_LIST_UPDATE') {
+                        const userIds = data.d.ops
+                            .filter(op => op.op === 'SYNC')
+                            .flatMap(op => op.items)
+                            .filter(item => item.member)
+                            .map(item => item.member.user.id);
+                        userIdsInput.value = parseList(userIds);
+                        logMessage(`ユーザーIDを${userIds.length}件取得しました`, true);
+                        ws.close();
+                        resolve(userIds);
+                    }
+                };
+                ws.onerror = () => {
+                    logMessage('WebSocketエラー: トークンが無効またはサーバーにアクセスできません');
+                    ws.close();
+                    resolve([]);
+                };
+                ws.onclose = () => {
+                    logMessage('WebSocket接続を閉じました');
+                };
+            });
+        }
+
+        // ボタンクリックで全データ取得
+        fetchBtn.addEventListener('click', async () => {
+            const token = tokenInput.value.trim();
+            const serverId = serverIdInput.value.trim();
+            if (!token || !serverId) {
+                logMessage('トークンまたはサーバーIDが入力されていません');
+                return;
+            }
+
+            fetchBtn.disabled = true;
+            fetchBtn.textContent = '取得中...';
+            channelIdsInput.value = '';
+            threadIdsInput.value = '';
+            forumIdsInput.value = '';
+            userIdsInput.value = '';
+
+            await Promise.all([
+                fetchChannels(token, serverId),
+                fetchThreads(token, serverId),
+                fetchUsers(token, serverId)
+            ]);
+
+            fetchBtn.disabled = false;
+            fetchBtn.textContent = 'IDを取得';
+        });
+    </script>
+</body>
+</html>
